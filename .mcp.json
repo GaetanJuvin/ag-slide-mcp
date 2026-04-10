@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ag-slide-mcp": {
+      "command": "/Users/gaetanjuvin/Project/AGSlideMCP/.venv/bin/python",
+      "args": ["-m", "ag_slide_mcp"],
+      "env": {
+        "AG_SLIDE_MCP_CONFIG_DIR": "/Users/gaetanjuvin/.ag_slide_mcp"
+      }
+    }
+  }
+}
