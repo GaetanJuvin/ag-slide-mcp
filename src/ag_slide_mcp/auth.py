@@ -1,21 +1,13 @@
-import json
-import os
-from pathlib import Path
-
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+
+from ag_slide_mcp.config import _config_dir
 
 SCOPES = [
     "https://www.googleapis.com/auth/presentations",
     "https://www.googleapis.com/auth/drive",
 ]
-
-
-def _config_dir() -> Path:
-    path = Path(os.environ.get("AG_SLIDE_MCP_CONFIG_DIR", "~/.ag_slide_mcp")).expanduser()
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def get_credentials() -> Credentials:

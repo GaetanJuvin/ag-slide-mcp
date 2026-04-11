@@ -4,11 +4,11 @@ A Model Context Protocol (MCP) server for Google Slides. Create, populate, and v
 
 The key differentiator is a **visual feedback loop**: the server exports slides as PNG images that Claude can inspect, enabling iterative refinement until slides look polished.
 
-## Tools (24)
+## Tools (26)
 
 | Module | Tools | Purpose |
 |--------|-------|---------|
-| **Presentation** | `create_presentation`, `get_presentation`, `list_presentations`, `delete_presentation`, `rename_presentation` | CRUD operations on presentations |
+| **Presentation** | `set_template`, `get_config`, `create_presentation`, `get_presentation`, `list_presentations`, `delete_presentation`, `rename_presentation` | Config + CRUD operations |
 | **Slides** | `add_slide`, `duplicate_slide`, `delete_slide`, `reorder_slides`, `get_slide` | Slide management with overflow detection |
 | **Content** | `add_text_box`, `update_text`, `replace_all_text`, `add_image`, `add_shape`, `update_shape_style`, `resize_element`, `add_table`, `update_table_cell` | Content manipulation |
 | **Export** | `export_slide_as_image`, `export_presentation_as_pdf` | Visual feedback loop |
@@ -53,7 +53,20 @@ The `.mcp.json` is included. Update the Python path to match your setup:
 }
 ```
 
-### 4. First run
+### 4. Configure your template
+
+A default template is **required**. On first use, set it via the MCP tool:
+
+```
+set_template("1UQbx4i3OOnm...")  →  saves to ~/.ag_slide_mcp/config.json
+```
+
+The template ID is the long string in the Google Slides URL:
+`https://docs.google.com/presentation/d/{TEMPLATE_ID}/edit`
+
+Every `create_presentation` call copies this template. You can override per-call with `template_id`.
+
+### 5. First run
 
 On first use, a browser window opens for OAuth consent. Tokens are cached in `~/.ag_slide_mcp/token.json` for subsequent runs.
 
@@ -62,7 +75,8 @@ On first use, a browser window opens for OAuth consent. Tokens are cached in `~/
 ### Template workflow
 
 ```
-create_presentation(title, template_id)  →  copies template via Drive API
+set_template("1UQbx4i3OOnm...")  →  saves default template to config
+create_presentation(title)  →  copies template via Drive API
 fill_template(presentation_id, {"{{title}}": "Q4 Report"})  →  replaces placeholders
 export_slide_as_image(presentation_id, slide_index=0)  →  PNG to /tmp/ag_slide_mcp/
 ```
@@ -90,6 +104,7 @@ The server includes built-in quality guidance:
 ```
 src/ag_slide_mcp/
 ├── server.py           # FastMCP server + quality instructions
+├── config.py           # Template + config management (~/.ag_slide_mcp/config.json)
 ├── auth.py             # OAuth 2.0 flow with token caching
 ├── google_clients.py   # Lazy-initialized Slides + Drive API singletons
 ├── utils.py            # hex_to_rgb, pt_to_emu, resize_image helpers

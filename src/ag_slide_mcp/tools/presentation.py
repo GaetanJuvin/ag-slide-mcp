@@ -1,37 +1,76 @@
 from googleapiclient.errors import HttpError
 
+from ag_slide_mcp.config import get_template_id, set_template_id, load_config, _config_path
 from ag_slide_mcp.google_clients import get_drive_service, get_slides_service
 from ag_slide_mcp.server import server
 
 
 @server.tool()
-def create_presentation(title: str, template_id: str | None = None) -> dict:
-    """Create a new Google Slides presentation.
+def set_template(template_id: str) -> dict:
+    """Set the default Google Slides template ID.
 
-    If template_id is provided, copies that presentation as a starting point.
-    Otherwise creates a blank presentation.
+    This template is used every time create_presentation is called.
+    The template ID is the long string in the Google Slides URL:
+    https://docs.google.com/presentation/d/{TEMPLATE_ID}/edit
+
+    Args:
+        template_id: The Google Slides presentation ID to use as the default template.
+    """
+    set_template_id(template_id)
+    return {
+        "success": True,
+        "template_id": template_id,
+        "config_path": str(_config_path()),
+    }
+
+
+@server.tool()
+def get_config() -> dict:
+    """Get the current AG Slide MCP configuration, including the default template ID."""
+    config = load_config()
+    template_id = config.get("default_template_id")
+    return {
+        "default_template_id": template_id,
+        "config_path": str(_config_path()),
+        "template_configured": template_id is not None,
+    }
+
+
+@server.tool()
+def create_presentation(title: str, template_id: str | None = None) -> dict:
+    """Create a new Google Slides presentation from the configured template.
+
+    Uses the default template from config. You can override with template_id.
+    If no template is configured, returns an error — call set_template first.
 
     Returns the presentation ID, title, and slide count.
     """
     try:
-        if template_id:
-            drive = get_drive_service()
-            copied = drive.files().copy(
-                fileId=template_id,
-                body={"name": title},
-            ).execute()
-            presentation_id = copied["id"]
-            slides_svc = get_slides_service()
-            pres = slides_svc.presentations().get(presentationId=presentation_id).execute()
-        else:
-            slides_svc = get_slides_service()
-            pres = slides_svc.presentations().create(body={"title": title}).execute()
+        # Resolve template: explicit arg > config > error
+        effective_template = template_id or get_template_id()
+        if not effective_template:
+            return {
+                "error": "No template configured. Call set_template(template_id) first with your Google Slides template ID. "
+                         "The template ID is the long string in the URL: "
+                         "https://docs.google.com/presentation/d/{TEMPLATE_ID}/edit",
+            }
+
+        drive = get_drive_service()
+        copied = drive.files().copy(
+            fileId=effective_template,
+            body={"name": title},
+        ).execute()
+        presentation_id = copied["id"]
+
+        slides_svc = get_slides_service()
+        pres = slides_svc.presentations().get(presentationId=presentation_id).execute()
 
         return {
             "presentation_id": pres["presentationId"],
             "title": pres.get("title", title),
             "slides_count": len(pres.get("slides", [])),
             "slide_ids": [s["objectId"] for s in pres.get("slides", [])],
+            "template_id": effective_template,
         }
     except HttpError as e:
         return {"error": f"Google API error: {e.reason}", "status": e.resp.status}

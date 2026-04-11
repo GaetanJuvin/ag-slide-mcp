@@ -2,6 +2,7 @@ import re
 
 from googleapiclient.errors import HttpError
 
+from ag_slide_mcp.config import get_template_id
 from ag_slide_mcp.google_clients import get_drive_service, get_slides_service
 from ag_slide_mcp.server import server
 
@@ -105,27 +106,33 @@ def fill_template(presentation_id: str, replacements: dict[str, str]) -> dict:
 
 @server.tool()
 def fill_template_from_copy(
-    template_id: str,
     title: str,
     replacements: dict[str, str],
+    template_id: str | None = None,
 ) -> dict:
-    """Copy a template presentation and fill in all placeholders in one step.
+    """Copy the default template and fill in all placeholders in one step.
 
-    This is the primary workflow for creating presentations from templates:
+    Uses the configured default template. You can override with template_id.
     1. Copies the template via Google Drive API
     2. Replaces all {{placeholder}} text with provided values
     3. Returns the new presentation ID
 
     Args:
-        template_id: The Google Slides presentation ID of the template.
         title: Title for the new presentation.
         replacements: Dict mapping placeholder strings to values.
+        template_id: Optional override template ID (uses default from config if omitted).
     """
     try:
+        effective_template = template_id or get_template_id()
+        if not effective_template:
+            return {
+                "error": "No template configured. Call set_template(template_id) first.",
+            }
+
         # Step 1: Copy the template
         drive = get_drive_service()
         copied = drive.files().copy(
-            fileId=template_id,
+            fileId=effective_template,
             body={"name": title},
         ).execute()
         new_id = copied["id"]
