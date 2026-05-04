@@ -4,7 +4,10 @@ from googleapiclient.errors import HttpError
 
 from ag_slide_mcp.google_clients import get_slides_service
 from ag_slide_mcp.server import server
+from ag_slide_mcp.tools.template import get_theme_fonts_for
 from ag_slide_mcp.utils import hex_to_rgb, pt_to_emu
+
+VALID_FONT_ROLES = {"title", "body", "none"}
 
 
 def _make_id() -> str:
@@ -23,11 +26,17 @@ def add_text_box(
     font_size: int = 18,
     bold: bool = False,
     color: str | None = None,
+    font_role: str = "body",
+    font_family: str | None = None,
 ) -> dict:
     """Add a text box to a slide.
 
     Coordinates are in points (1 inch = 72 points).
     Color is a hex string like '#FF5733'.
+
+    By default, new text inherits the template's theme font for `font_role`
+    ("title" or "body"). Pass `font_role="none"` to skip auto-resolution, or
+    `font_family` to force a specific family (overrides `font_role`).
 
     Args:
         presentation_id: The presentation ID.
@@ -40,10 +49,21 @@ def add_text_box(
         font_size: Font size in points (default: 18).
         bold: Whether to bold the text (default: False).
         color: Optional hex color for the text (e.g., '#333333').
+        font_role: "title", "body", or "none". Picks the matching template
+            theme font. Default: "body".
+        font_family: Explicit font family (e.g., "Roboto"). Overrides font_role.
     """
+    if font_role not in VALID_FONT_ROLES:
+        return {"error": f"Invalid font_role {font_role!r}. Expected one of {sorted(VALID_FONT_ROLES)}."}
+
     try:
         slides_svc = get_slides_service()
         element_id = _make_id()
+
+        resolved_family = font_family
+        if not resolved_family and font_role != "none":
+            theme_fonts = get_theme_fonts_for(presentation_id)
+            resolved_family = theme_fonts.get(font_role)
 
         requests_list = [
             {
@@ -88,6 +108,11 @@ def add_text_box(
             style["foregroundColor"] = {"opaqueColor": {"rgbColor": rgb}}
             fields += ",foregroundColor"
 
+        if resolved_family:
+            style["fontFamily"] = resolved_family
+            style["weightedFontFamily"] = {"fontFamily": resolved_family}
+            fields += ",fontFamily,weightedFontFamily"
+
         requests_list.append({
             "updateTextStyle": {
                 "objectId": element_id,
@@ -102,7 +127,12 @@ def add_text_box(
             body={"requests": requests_list},
         ).execute()
 
-        return {"success": True, "element_id": element_id, "slide_id": slide_id}
+        return {
+            "success": True,
+            "element_id": element_id,
+            "slide_id": slide_id,
+            "font_family": resolved_family,
+        }
     except HttpError as e:
         return {"error": f"Google API error: {e.reason}", "status": e.resp.status}
 

@@ -26,6 +26,11 @@ server = FastMCP(
 5. **Visual feedback loop:** Create → Fill → Export → Review → Fix → Re-export. Iterate until every slide looks clean.
 
 6. **Coordinate system:** All positions are in points (1 inch = 72 points). Slide dimensions are typically 720×405 pt (widescreen 16:9).
+
+7. **Respect template fonts.** The template defines theme fonts for titles and body text. Do not override `fontFamily` ad-hoc.
+   - Prefer editing existing template text boxes (`update_text`, `replace_all_text`, `fill_template`) — they preserve the original font.
+   - When you must create a new text box, call `add_text_box` with `font_role="title"` or `font_role="body"` so it picks up the template's theme font automatically. Use `get_theme_fonts` if you need to inspect them.
+   - Only pass an explicit `font_family` when the user asks for a specific font.
 """,
 )
 

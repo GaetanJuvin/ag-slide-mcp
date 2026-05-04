@@ -8,6 +8,48 @@ from ag_slide_mcp.server import server
 
 PLACEHOLDER_RE = re.compile(r"\{\{[^}]+\}\}")
 
+TITLE_PLACEHOLDER_TYPES = {"TITLE", "CENTERED_TITLE"}
+BODY_PLACEHOLDER_TYPES = {"BODY", "SUBTITLE"}
+
+
+def _first_font_family(element: dict) -> str | None:
+    """Return the first non-empty fontFamily from a shape's text runs, if any."""
+    text_elements = element.get("shape", {}).get("text", {}).get("textElements", [])
+    for te in text_elements:
+        family = te.get("textRun", {}).get("style", {}).get("fontFamily")
+        if family:
+            return family
+    return None
+
+
+def _resolve_theme_fonts(presentation: dict) -> dict:
+    """Walk masters/layouts and pull title/body theme fonts from placeholder styles.
+
+    Returns {'title': str | None, 'body': str | None}.
+    """
+    fonts: dict[str, str | None] = {"title": None, "body": None}
+    sources = presentation.get("masters", []) + presentation.get("layouts", [])
+    for page in sources:
+        for el in page.get("pageElements", []):
+            placeholder = el.get("shape", {}).get("placeholder", {})
+            ptype = placeholder.get("type", "")
+            family = _first_font_family(el)
+            if not family:
+                continue
+            if ptype in TITLE_PLACEHOLDER_TYPES and not fonts["title"]:
+                fonts["title"] = family
+            elif ptype in BODY_PLACEHOLDER_TYPES and not fonts["body"]:
+                fonts["body"] = family
+            if fonts["title"] and fonts["body"]:
+                return fonts
+    return fonts
+
+
+def get_theme_fonts_for(presentation_id: str) -> dict:
+    """Internal helper: fetch the presentation and resolve theme fonts."""
+    pres = get_slides_service().presentations().get(presentationId=presentation_id).execute()
+    return _resolve_theme_fonts(pres)
+
 
 def _extract_text_from_element(element: dict) -> str:
     """Extract plain text from a page element."""
@@ -20,6 +62,24 @@ def _extract_text_from_element(element: dict) -> str:
         if "content" in text_run:
             parts.append(text_run["content"])
     return "".join(parts)
+
+
+@server.tool()
+def get_theme_fonts(presentation_id: str) -> dict:
+    """Return the title and body theme fonts defined by the template's masters/layouts.
+
+    Use this to discover which font families to pass to add_text_box so new text
+    matches the template's typography.
+
+    Returns: {"title": "Roboto", "body": "Open Sans"} (values may be null if unset).
+    """
+    try:
+        return {
+            "presentation_id": presentation_id,
+            "fonts": get_theme_fonts_for(presentation_id),
+        }
+    except HttpError as e:
+        return {"error": f"Google API error: {e.reason}", "status": e.resp.status}
 
 
 @server.tool()
